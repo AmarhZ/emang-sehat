@@ -22,7 +22,7 @@ export default function ProductTable({ products }: { products: Produk[] }) {
 
   return (
     <>
-      <div className="bar-head" style={{ marginTop: -8 }}>
+      <div className="bar-head" style={{ justifyContent: "flex-end" }}>
         <span />
         <button className="btn" onClick={() => open()}>Tambah produk</button>
       </div>

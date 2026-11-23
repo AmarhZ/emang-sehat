@@ -79,3 +79,10 @@ footer{text-align:center;color:var(--muted);font-size:.85rem;padding:24px 20px}
   .stats{grid-template-columns:repeat(2,1fr)}.big{width:110px;height:110px;font-size:3.6rem}.row{grid-template-columns:1fr 52px}.row .bar{grid-column:1/-1;order:3}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+/* Header khusus admin */
+.admin-head{background:var(--teal);color:#fff;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 20px}
+.admin-head .brand{font:700 1.2rem var(--f-d);color:#fff;text-decoration:none}
+.admin-head .tag{font:700 .7rem var(--f-b);letter-spacing:.08em;text-transform:uppercase;background:var(--gc);color:#2E241D;padding:2px 8px;border-radius:999px;vertical-align:middle;margin-left:6px}
+.admin-head nav{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.admin-head nav a,.admin-head nav button{color:#fff;font:500 .95rem var(--f-b);text-decoration:none;background:none;border:0;padding:4px 0;cursor:pointer}
+.admin-head nav a:hover,.admin-head nav button:hover{text-decoration:underline}
