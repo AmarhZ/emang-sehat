@@ -1,12 +1,17 @@
 'use client';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { PEMANIS_LABEL, type Pemanis } from '@/lib/grading';
+import CameraCapture from './CameraCapture';
+import { readLabelText } from '@/lib/ocr';
+import { parseLabel } from '@/lib/labelParser';
 
 type F = { nama: string; merek: string; ukuran_ml: string; kalori: string; gula_g: string; natrium_mg: string; lemak_jenuh_g: string; pemanis: Pemanis; komposisi: string };
 const EMPTY: F = { nama: '', merek: '', ukuran_ml: '', kalori: '', gula_g: '', natrium_mg: '', lemak_jenuh_g: '', pemanis: 'none', komposisi: '' };
+const LABELS: Record<keyof F, string> = { nama: 'nama', merek: 'merek', ukuran_ml: 'ukuran', kalori: 'kalori', gula_g: 'gula', natrium_mg: 'natrium', lemak_jenuh_g: 'lemak jenuh', pemanis: 'pemanis', komposisi: 'komposisi' };
+const NEEDED: (keyof F)[] = ['ukuran_ml', 'gula_g', 'natrium_mg', 'lemak_jenuh_g'];
 
-// Perkecil gambar agar unggahan ringan dan cepat dibaca.
+// Perkecil gambar dari file agar unggahan ringan dan cepat dibaca.
 function downscale(file: File, max = 1600): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -17,7 +22,7 @@ function downscale(file: File, max = 1600): Promise<string> {
       c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
       c.getContext('2d')!.drawImage(img, 0, 0, c.width, c.height);
       URL.revokeObjectURL(url);
-      resolve(c.toDataURL('image/jpeg', 0.85));
+      resolve(c.toDataURL('image/jpeg', 0.88));
     };
     img.onerror = () => reject(new Error('Gambar tidak bisa dibuka.'));
     img.src = url;
@@ -26,36 +31,43 @@ function downscale(file: File, max = 1600): Promise<string> {
 
 export default function AnalysisForm() {
   const router = useRouter();
+  const fileRef = useRef<HTMLInputElement>(null);
   const [mode, setMode] = useState<'manual' | 'scan'>('manual');
   const [f, setF] = useState<F>(EMPTY);
   const [preview, setPreview] = useState('');
+  const [camOpen, setCamOpen] = useState(false);
   const [busy, setBusy] = useState<'' | 'ocr' | 'save'>('');
   const [error, setError] = useState('');
-  const [note, setNote] = useState('');
+  const [scanError, setScanError] = useState('');
+  const [filled, setFilled] = useState<(keyof F)[] | null>(null);
+  const [notes, setNotes] = useState<string[]>([]);
+  const [rawText, setRawText] = useState('');
+  const [progress, setProgress] = useState({ pct: 0, label: '' });
 
   const set = (k: keyof F) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setF({ ...f, [k]: e.target.value });
 
-  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setError(''); setNote('');
-    try { setPreview(await downscale(file)); } catch (err) { setError((err as Error).message); }
+  // Baca teks label dengan OCR (Tesseract.js) di browser, lalu isi form dari hasilnya.
+  async function scan(image: string) {
+    setPreview(image); setBusy('ocr'); setScanError(''); setFilled(null); setNotes([]); setRawText('');
+    setProgress({ pct: 0, label: 'Menyiapkan…' });
+    try {
+      const text = await readLabelText(image, (pct, label) => setProgress({ pct, label }));
+      setRawText(text);
+      const p = parseLabel(text);
+      setF((old) => ({ ...old, ...Object.fromEntries(Object.entries(p.data).map(([k, v]) => [k, String(v)])) }));
+      setFilled(p.found as (keyof F)[]);
+      setNotes(p.notes);
+    } catch {
+      setScanError('Pembacaan gagal. Pastikan perangkat terhubung ke internet (data bahasa diunduh sekali), lalu coba lagi.');
+    }
+    setBusy('');
   }
 
-  async function readLabel() {
-    if (!preview) { setError('Unggah gambar label terlebih dahulu.'); return; }
-    setBusy('ocr'); setError(''); setNote('');
-    try {
-      const r = await fetch('/api/ocr', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ image: preview }) });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error || 'Gagal membaca label.');
-      setF((old) => ({
-        ...old,
-        ...Object.fromEntries(Object.entries(d.data).filter(([, v]) => v !== null && v !== '').map(([k, v]) => [k, String(v)])),
-      }));
-      setNote('Label terbaca. Periksa angkanya sebelum menganalisis.');
-    } catch (err) { setError((err as Error).message); }
-    setBusy('');
+  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    try { await scan(await downscale(file)); } catch (err) { setScanError((err as Error).message); }
   }
 
   async function submit(e: React.FormEvent) {
@@ -82,23 +94,52 @@ export default function AnalysisForm() {
     </div>
   );
 
+  const missing = filled ? NEEDED.filter((k) => !filled.includes(k)) : [];
+
   return (
     <>
       <div className="tabs" role="tablist">
         <button type="button" role="tab" aria-selected={mode === 'manual'} onClick={() => setMode('manual')}>Input manual</button>
-        <button type="button" role="tab" aria-selected={mode === 'scan'} onClick={() => setMode('scan')}>Scan atau unggah gambar</button>
+        <button type="button" role="tab" aria-selected={mode === 'scan'} onClick={() => setMode('scan')}>Scan label (kamera atau gambar)</button>
       </div>
 
       {mode === 'scan' && (
         <div className="drop">
-          <p style={{ marginBottom: 8 }}><b>Unggah foto label gizi</b><br /><span className="hint">Pastikan tabel gizi terlihat jelas dan tidak buram.</span></p>
-          <input type="file" accept="image/*" capture="environment" onChange={onFile} style={{ maxWidth: 300 }} aria-label="Pilih foto label gizi" />
+          <p style={{ marginBottom: 8 }}><b>Scan label gizi dengan OCR</b><br /><span className="hint">Foto tabel “Informasi Nilai Gizi” dan komposisi. Teksnya dibaca di browsermu (Tesseract.js), lalu angkanya mengisi formulir di bawah. Nama dan merek diisi manual.</span></p>
+
+          {camOpen ? (
+            <CameraCapture onClose={() => setCamOpen(false)} onCapture={(img) => { setCamOpen(false); scan(img); }} />
+          ) : (
+            <div className="scan-actions">
+              <button type="button" className="btn" onClick={() => { setScanError(''); setCamOpen(true); }} disabled={busy === 'ocr'}>Buka kamera</button>
+              <button type="button" className="btn alt" onClick={() => fileRef.current?.click()} disabled={busy === 'ocr'}>Unggah gambar</button>
+              <input ref={fileRef} type="file" accept="image/*" onChange={onFile} hidden aria-label="Pilih foto label gizi" />
+            </div>
+          )}
+
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          {preview && <img src={preview} alt="Pratinjau label gizi" />}
-          <p style={{ margin: '12px auto 0' }}>
-            <button type="button" className="btn sm" onClick={readLabel} disabled={busy === 'ocr'}>{busy === 'ocr' ? 'Membaca label…' : 'Baca label otomatis'}</button>
-          </p>
-          {note && <p className="hint" style={{ margin: '8px auto 0' }}>{note}</p>}
+          {preview && !camOpen && <img src={preview} alt="Foto label yang dipindai" />}
+          {busy === 'ocr' && (
+            <div role="status" style={{ margin: '8px auto', maxWidth: 360 }}>
+              <p style={{ margin: '0 auto 4px' }}><b>{progress.label}</b></p>
+              <progress value={progress.pct} max={100} style={{ width: '100%' }} />
+            </div>
+          )}
+          {scanError && (
+            <p className="err" role="alert" style={{ margin: '8px auto' }}>
+              {scanError}{preview && <> <button type="button" className="btn sm alt" onClick={() => scan(preview)}>Coba lagi</button></>}
+            </p>
+          )}
+          {filled && (
+            <div style={{ margin: '8px auto' }} role="status">
+              <p className="hint" style={{ margin: '0 auto 4px' }}>Terbaca: {filled.length ? filled.map((k) => <span className="filled" key={k}>{LABELS[k]}</span>) : 'tidak ada data yang terbaca'}</p>
+              {missing.length > 0
+                ? <p className="err" style={{ margin: 0 }}>Belum terbaca: {missing.map((k) => LABELS[k]).join(', ')}. Isi manual di bawah, atau foto ulang dengan cahaya lebih terang dan teks lurus.</p>
+                : <p className="hint" style={{ margin: 0 }}>Periksa angkanya di bawah sebelum menganalisis.</p>}
+              {notes.map((n) => <p className="hint" style={{ margin: '4px auto 0' }} key={n}>{n}</p>)}
+              {rawText && <details style={{ marginTop: 8, textAlign: 'left', maxWidth: 520, marginInline: 'auto' }}><summary className="hint">Lihat teks mentah hasil OCR</summary><pre style={{ whiteSpace: 'pre-wrap', fontSize: '.8rem', margin: '6px 0 0' }}>{rawText}</pre></details>}
+            </div>
+          )}
         </div>
       )}
 

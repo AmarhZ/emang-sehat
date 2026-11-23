@@ -68,7 +68,6 @@ th,td{text-align:left;padding:10px 8px;border-bottom:1px solid var(--line);white
 .stats div{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 16px}
 .stats b{font:700 1.6rem var(--f-d);display:block}
 .bar-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px}
-.sub{display:flex;gap:8px;margin-bottom:20px}
 dialog{border:0;border-radius:16px;padding:24px;width:min(640px,94vw);background:var(--surface);color:var(--ink)}
 dialog::backdrop{background:rgba(30,20,15,.55)}
 .empty{padding:24px;text-align:center;color:var(--muted)}
@@ -86,3 +85,9 @@ footer{text-align:center;color:var(--muted);font-size:.85rem;padding:24px 20px}
 .admin-head nav{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
 .admin-head nav a,.admin-head nav button{color:#fff;font:500 .95rem var(--f-b);text-decoration:none;background:none;border:0;padding:4px 0;cursor:pointer}
 .admin-head nav a:hover,.admin-head nav button:hover{text-decoration:underline}
+/* Scan kamera */
+.cam{position:relative;max-width:520px;margin:0 auto 8px;border-radius:14px;overflow:hidden;background:#000}
+.cam video{width:100%;display:block;max-height:60vh;object-fit:cover}
+.cam .frame{position:absolute;inset:12% 8%;border:3px dashed rgba(255,255,255,.85);border-radius:12px;pointer-events:none}
+.scan-actions{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:12px 0}
+.filled{display:inline-block;background:var(--bg);border:1px solid var(--line);border-radius:999px;padding:2px 10px;margin:2px;font-size:.82rem}
